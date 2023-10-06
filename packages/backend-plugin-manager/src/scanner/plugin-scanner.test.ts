@@ -15,12 +15,18 @@
  */
 
 import { PluginScanner } from './plugin-scanner';
-import mockFs from 'mock-fs';
 import { JsonObject } from '@backstage/types';
 import { Logs, MockedLogger } from '../__testUtils__/testUtils';
 import { ConfigReader } from '@backstage/config';
 import path from 'path';
+import * as url from 'url';
 import { ScannedPluginPackage } from './types';
+import {
+  MockDirectoryContent,
+  createMockDirectory,
+} from '@backstage/backend-test-utils';
+
+const mockDir = createMockDirectory();
 
 describe('plugin-scanner', () => {
   const env = process.env;
@@ -29,7 +35,7 @@ describe('plugin-scanner', () => {
   });
 
   afterEach(() => {
-    mockFs.restore();
+    mockDir.clear();
     process.env = env;
   });
 
@@ -60,75 +66,77 @@ describe('plugin-scanner', () => {
       },
       {
         name: 'valid config with relative root directory path',
-        backstageRoot: '/backstageRoot',
+        backstageRoot: mockDir.resolve('backstageRoot'),
         fileSystem: {
-          '/backstageRoot': mockFs.directory({
-            items: {
-              'dist-dynamic': mockFs.directory(),
-            },
-          }),
+          backstageRoot: {
+            'dist-dynamic': {},
+          },
         },
         config: {
           dynamicPlugins: {
             rootDirectory: 'dist-dynamic',
           },
         },
-        expectedRootDirectory: '/backstageRoot/dist-dynamic',
+        expectedRootDirectory: mockDir.resolve('backstageRoot/dist-dynamic'),
       },
       {
         name: 'valid config with absolute root directory path inside the backstage root',
-        backstageRoot: '/backstageRoot',
+        backstageRoot: mockDir.resolve('backstageRoot'),
         fileSystem: {
-          '/backstageRoot': mockFs.directory({
-            items: {
-              'dist-dynamic': mockFs.directory(),
-            },
-          }),
+          backstageRoot: {
+            'dist-dynamic': {},
+          },
         },
         config: {
           dynamicPlugins: {
-            rootDirectory: '/backstageRoot/dist-dynamic',
+            rootDirectory: mockDir.resolve('backstageRoot/dist-dynamic'),
           },
         },
-        expectedRootDirectory: '/backstageRoot/dist-dynamic',
+        expectedRootDirectory: mockDir.resolve('backstageRoot/dist-dynamic'),
       },
       {
         name: 'valid config with absolute root directory path outside the backstage root',
-        backstageRoot: '/backstageRoot',
+        backstageRoot: mockDir.resolve('backstageRoot'),
         fileSystem: {
-          '/somewhere': mockFs.directory({
-            items: {
-              'dist-dynamic': mockFs.directory(),
-            },
-          }),
+          somewhere: {
+            'dist-dynamic': {},
+          },
         },
         config: {
           dynamicPlugins: {
-            rootDirectory: '/somewhere/dist-dynamic',
+            rootDirectory: mockDir.resolve('somewhere/dist-dynamic'),
           },
         },
-        expectedError: `Dynamic plugins under '/somewhere/dist-dynamic' cannot access backstage modules in '/backstageRoot/node_modules'.
-Please add '/backstageRoot/node_modules' to the 'NODE_PATH' when running the backstage backend.`,
+        expectedError: `Dynamic plugins under '${mockDir.resolve(
+          'somewhere/dist-dynamic',
+        )}' cannot access backstage modules in '${mockDir.resolve(
+          'backstageRoot/node_modules',
+        )}'.
+Please add '${mockDir.resolve(
+          'backstageRoot/node_modules',
+        )}' to the 'NODE_PATH' when running the backstage backend.`,
       },
       {
         name: 'valid config with absolute root directory path outside the backstage root but with backstage root included in NODE_PATH',
-        backstageRoot: '/backstageRoot',
+        backstageRoot: mockDir.resolve('backstageRoot'),
         fileSystem: {
-          '/somewhere': mockFs.directory({
-            items: {
-              'dist-dynamic': mockFs.directory(),
-            },
-          }),
+          somewhere: {
+            'dist-dynamic': {},
+          },
         },
         config: {
           dynamicPlugins: {
-            rootDirectory: '/somewhere/dist-dynamic',
+            rootDirectory: mockDir.resolve('somewhere/dist-dynamic'),
           },
         },
         environment: {
-          NODE_PATH: `/somewhere-else${path.delimiter}/backstageRoot/node_modules${path.delimiter}/anywhere-else`,
+          NODE_PATH: `${mockDir.resolve('somewhere-else')}${
+            path.delimiter
+          }${mockDir.resolve('backstageRoot', 'node_modules')}${
+            path.delimiter
+          }${mockDir.resolve('anywhere-else')}`,
         },
-        expectedRootDirectory: '/somewhere/dist-dynamic',
+        expectedRootDirectory: mockDir.resolve('somewhere/dist-dynamic'),
       },
       {
         name: 'invalid config: dynamicPlugins not an object',
@@ -175,13 +183,11 @@ Please add '/backstageRoot/node_modules' to the 'NODE_PATH' when running the bac
       },
       {
         name: 'valid config pointing to a file instead of a directory',
-        backstageRoot: '/backstageRoot',
+        backstageRoot: mockDir.resolve('backstageRoot'),
         fileSystem: {
-          '/backstageRoot': mockFs.directory({
-            items: {
-              'dist-dynamic': mockFs.file(),
-            },
-          }),
+          backstageRoot: {
+            'dist-dynamic': '',
+          },
         },
         config: {
           dynamicPlugins: {
@@ -207,7 +213,7 @@ Please add '/backstageRoot/node_modules' to the 'NODE_PATH' when running the bac
         );
       }
       if (tc.fileSystem) {
-        mockFs(tc.fileSystem);
+        mockDir.setContent(tc.fileSystem);
       }
       if (tc.expectedError) {
         /* eslint-disable-next-line jest/no-conditional-expect */
@@ -229,7 +235,7 @@ Please add '/backstageRoot/node_modules' to the 'NODE_PATH' when running the bac
     type TestCase = {
       name: string;
       preferAlpha?: boolean;
-      fileSystem?: any;
+      fileSystem?: MockDirectoryContent;
       expectedLogs?: Logs;
       expectedPluginPackages?: ScannedPluginPackage[];
       expectedError?: string;
@@ -250,31 +256,23 @@ Please add '/backstageRoot/node_modules' to the 'NODE_PATH' when running the bac
       {
         name: 'manifest found in directory',
         fileSystem: {
-          '/backstageRoot': mockFs.directory({
-            items: {
-              'dist-dynamic': mockFs.directory({
-                items: {
-                  'test-backend-plugin': mockFs.directory({
-                    items: {
-                      'package.json': mockFs.file({
-                        content: JSON.stringify({
-                          name: 'test-backend-plugin-dynamic',
-                          version: '0.0.0',
-                          main: 'dist/index.cjs.js',
-                          backstage: { role: 'backend-plugin' },
-                        }),
-                      }),
-                    },
-                  }),
-                },
-              }),
+          backstageRoot: {
+            'dist-dynamic': {
+              'test-backend-plugin': {
+                'package.json': JSON.stringify({
+                  name: 'test-backend-plugin-dynamic',
+                  version: '0.0.0',
+                  main: 'dist/index.cjs.js',
+                  backstage: { role: 'backend-plugin' },
+                }),
+              },
             },
-          }),
+          },
         },
         expectedPluginPackages: [
           {
-            location: new URL(
-              'file:///backstageRoot/dist-dynamic/test-backend-plugin',
+            location: url.pathToFileURL(
+              mockDir.resolve('backstageRoot/dist-dynamic/test-backend-plugin'),
             ),
             manifest: {
               name: 'test-backend-plugin-dynamic',
@@ -288,38 +286,29 @@ Please add '/backstageRoot/node_modules' to the 'NODE_PATH' when running the bac
       {
         name: 'backend plugin found in symlink',
         fileSystem: {
-          '/backstageRoot': mockFs.directory({
-            items: {
-              'dist-dynamic': mockFs.directory({
-                items: {
-                  'test-backend-plugin': mockFs.symlink({
-                    path: '/somewhere-else/test-backend-plugin-target',
-                  }),
-                },
+          backstageRoot: {
+            'dist-dynamic': {
+              'test-backend-plugin': ctx =>
+                ctx.symlink(
+                  mockDir.resolve('somewhere-else/test-backend-plugin-target'),
+                ),
+            },
+          },
+          'somewhere-else': {
+            'test-backend-plugin-target': {
+              'package.json': JSON.stringify({
+                name: 'test-backend-plugin-dynamic',
+                version: '0.0.0',
+                main: 'dist/index.cjs.js',
+                backstage: { role: 'backend-plugin' },
               }),
             },
-          }),
-          '/somewhere-else': mockFs.directory({
-            items: {
-              'test-backend-plugin-target': mockFs.directory({
-                items: {
-                  'package.json': mockFs.file({
-                    content: JSON.stringify({
-                      name: 'test-backend-plugin-dynamic',
-                      version: '0.0.0',
-                      main: 'dist/index.cjs.js',
-                      backstage: { role: 'backend-plugin' },
-                    }),
-                  }),
-                },
-              }),
-            },
-          }),
+          },
         },
         expectedPluginPackages: [
           {
-            location: new URL(
-              'file:///backstageRoot/dist-dynamic/test-backend-plugin',
+            location: url.pathToFileURL(
+              mockDir.resolve('backstageRoot/dist-dynamic/test-backend-plugin'),
             ),
             manifest: {
               name: 'test-backend-plugin-dynamic',
@@ -333,22 +322,19 @@ Please add '/backstageRoot/node_modules' to the 'NODE_PATH' when running the bac
       {
         name: 'ignored folder child: not a directory',
         fileSystem: {
-          '/backstageRoot': mockFs.directory({
-            items: {
-              'dist-dynamic': mockFs.directory({
-                items: {
-                  'test-backend-plugin': mockFs.file({}),
-                },
-              }),
+          backstageRoot: {
+            'dist-dynamic': {
+              'test-backend-plugin': '',
             },
-          }),
+          },
         },
         expectedPluginPackages: [],
         expectedLogs: {
           infos: [
             {
-              message:
-                "skipping '/backstageRoot/dist-dynamic/test-backend-plugin' since it is not a directory",
+              message: `skipping '${mockDir.resolve(
+                'backstageRoot/dist-dynamic/test-backend-plugin',
+              )}' since it is not a directory`,
             },
           ],
         },
@@ -356,29 +342,25 @@ Please add '/backstageRoot/node_modules' to the 'NODE_PATH' when running the bac
       {
         name: 'ignored folder child symlink: target is not a directory',
         fileSystem: {
-          '/backstageRoot': mockFs.directory({
-            items: {
-              'dist-dynamic': mockFs.directory({
-                items: {
-                  'test-backend-plugin': mockFs.symlink({
-                    path: '/somewhere-else/test-backend-plugin-target',
-                  }),
-                },
-              }),
+          backstageRoot: {
+            'dist-dynamic': {
+              'test-backend-plugin': ctx =>
+                ctx.symlink(
+                  mockDir.resolve('somewhere-else/test-backend-plugin-target'),
+                ),
             },
-          }),
-          '/somewhere-else': mockFs.directory({
-            items: {
-              'test-backend-plugin-target': mockFs.file({}),
-            },
-          }),
+          },
+          'somewhere-else': {
+            'test-backend-plugin-target': '',
+          },
         },
         expectedPluginPackages: [],
         expectedLogs: {
           infos: [
             {
-              message:
-                "skipping '/backstageRoot/dist-dynamic/test-backend-plugin' since it is not a directory",
+              message: `skipping '${mockDir.resolve(
+                'backstageRoot/dist-dynamic/test-backend-plugin',
+              )}' since it is not a directory`,
             },
           ],
         },
@@ -387,42 +369,30 @@ Please add '/backstageRoot/node_modules' to the 'NODE_PATH' when running the bac
         name: 'alpha manifest available but not preferred',
         preferAlpha: false,
         fileSystem: {
-          '/backstageRoot': mockFs.directory({
-            items: {
-              'dist-dynamic': mockFs.directory({
-                items: {
-                  'test-backend-plugin': mockFs.directory({
-                    items: {
-                      'package.json': mockFs.file({
-                        content: JSON.stringify({
-                          name: 'test-backend-plugin-dynamic',
-                          version: '0.0.0',
-                          main: 'dist/index.cjs.js',
-                          backstage: { role: 'backend-plugin' },
-                        }),
-                      }),
-                      alpha: mockFs.directory({
-                        items: {
-                          'package.json': mockFs.file({
-                            content: JSON.stringify({
-                              name: 'test-backend-plugin-dynamic',
-                              version: '0.0.0',
-                              main: '../dist/alpha.cjs.js',
-                            }),
-                          }),
-                        },
-                      }),
-                    },
+          backstageRoot: {
+            'dist-dynamic': {
+              'test-backend-plugin': {
+                'package.json': JSON.stringify({
+                  name: 'test-backend-plugin-dynamic',
+                  version: '0.0.0',
+                  main: 'dist/index.cjs.js',
+                  backstage: { role: 'backend-plugin' },
+                }),
+                alpha: {
+                  'package.json': JSON.stringify({
+                    name: 'test-backend-plugin-dynamic',
+                    version: '0.0.0',
+                    main: '../dist/alpha.cjs.js',
                   }),
                 },
-              }),
+              },
             },
-          }),
+          },
         },
         expectedPluginPackages: [
           {
-            location: new URL(
-              'file:///backstageRoot/dist-dynamic/test-backend-plugin',
+            location: url.pathToFileURL(
+              mockDir.resolve('backstageRoot/dist-dynamic/test-backend-plugin'),
             ),
             manifest: {
               name: 'test-backend-plugin-dynamic',
@@ -437,42 +407,32 @@ Please add '/backstageRoot/node_modules' to the 'NODE_PATH' when running the bac
         name: 'alpha manifest preferred and found in directory',
         preferAlpha: true,
         fileSystem: {
-          '/backstageRoot': mockFs.directory({
-            items: {
-              'dist-dynamic': mockFs.directory({
-                items: {
-                  'test-backend-plugin': mockFs.directory({
-                    items: {
-                      'package.json': mockFs.file({
-                        content: JSON.stringify({
-                          name: 'test-backend-plugin-dynamic',
-                          version: '0.0.0',
-                          main: 'dist/index.cjs.js',
-                          backstage: { role: 'backend-plugin' },
-                        }),
-                      }),
-                      alpha: mockFs.directory({
-                        items: {
-                          'package.json': mockFs.file({
-                            content: JSON.stringify({
-                              name: 'test-backend-plugin-dynamic',
-                              version: '0.0.0',
-                              main: '../dist/alpha.cjs.js',
-                            }),
-                          }),
-                        },
-                      }),
-                    },
+          backstageRoot: {
+            'dist-dynamic': {
+              'test-backend-plugin': {
+                'package.json': JSON.stringify({
+                  name: 'test-backend-plugin-dynamic',
+                  version: '0.0.0',
+                  main: 'dist/index.cjs.js',
+                  backstage: { role: 'backend-plugin' },
+                }),
+                alpha: {
+                  'package.json': JSON.stringify({
+                    name: 'test-backend-plugin-dynamic',
+                    version: '0.0.0',
+                    main: '../dist/alpha.cjs.js',
                   }),
                 },
-              }),
+              },
             },
-          }),
+          },
         },
         expectedPluginPackages: [
           {
-            location: new URL(
-              'file:///backstageRoot/dist-dynamic/test-backend-plugin/alpha',
+            location: url.pathToFileURL(
+              mockDir.resolve(
+                'backstageRoot/dist-dynamic/test-backend-plugin/alpha',
+              ),
             ),
             manifest: {
               name: 'test-backend-plugin-dynamic',
@@ -487,32 +447,24 @@ Please add '/backstageRoot/node_modules' to the 'NODE_PATH' when running the bac
         name: 'alpha manifest preferred but skipped because not a directory',
         preferAlpha: true,
         fileSystem: {
-          '/backstageRoot': mockFs.directory({
-            items: {
-              'dist-dynamic': mockFs.directory({
-                items: {
-                  'test-backend-plugin': mockFs.directory({
-                    items: {
-                      'package.json': mockFs.file({
-                        content: JSON.stringify({
-                          name: 'test-backend-plugin-dynamic',
-                          version: '0.0.0',
-                          main: 'dist/index.cjs.js',
-                          backstage: { role: 'backend-plugin' },
-                        }),
-                      }),
-                      alpha: mockFs.file({}),
-                    },
-                  }),
-                },
-              }),
+          backstageRoot: {
+            'dist-dynamic': {
+              'test-backend-plugin': {
+                'package.json': JSON.stringify({
+                  name: 'test-backend-plugin-dynamic',
+                  version: '0.0.0',
+                  main: 'dist/index.cjs.js',
+                  backstage: { role: 'backend-plugin' },
+                }),
+                alpha: '',
+              },
             },
-          }),
+          },
         },
         expectedPluginPackages: [
           {
-            location: new URL(
-              'file:///backstageRoot/dist-dynamic/test-backend-plugin',
+            location: url.pathToFileURL(
+              mockDir.resolve('backstageRoot/dist-dynamic/test-backend-plugin'),
             ),
             manifest: {
               name: 'test-backend-plugin-dynamic',
@@ -525,8 +477,9 @@ Please add '/backstageRoot/node_modules' to the 'NODE_PATH' when running the bac
         expectedLogs: {
           warns: [
             {
-              message:
-                "skipping '/backstageRoot/dist-dynamic/test-backend-plugin/alpha' since it is not a directory",
+              message: `skipping '${mockDir.resolve(
+                'backstageRoot/dist-dynamic/test-backend-plugin/alpha',
+              )}' since it is not a directory`,
             },
           ],
         },
@@ -535,43 +488,32 @@ Please add '/backstageRoot/node_modules' to the 'NODE_PATH' when running the bac
         name: 'invalid alpha package.json',
         preferAlpha: true,
         fileSystem: {
-          '/backstageRoot': mockFs.directory({
-            items: {
-              'dist-dynamic': mockFs.directory({
-                items: {
-                  'test-backend-plugin': mockFs.directory({
-                    items: {
-                      'package.json': mockFs.file({
-                        content: JSON.stringify({
-                          name: 'test-backend-plugin-dynamic',
-                          version: '0.0.0',
-                          main: 'dist/index.cjs.js',
-                          backstage: { role: 'backend-plugin' },
-                        }),
-                      }),
-                      alpha: mockFs.directory({
-                        items: {
-                          'package.json': mockFs.file({
-                            content: "invalid json content, 1, '",
-                          }),
-                        },
-                      }),
-                    },
-                  }),
+          backstageRoot: {
+            'dist-dynamic': {
+              'test-backend-plugin': {
+                'package.json': JSON.stringify({
+                  name: 'test-backend-plugin-dynamic',
+                  version: '0.0.0',
+                  main: 'dist/index.cjs.js',
+                  backstage: { role: 'backend-plugin' },
+                }),
+                alpha: {
+                  'package.json': "invalid json content, 1, '",
                 },
-              }),
+              },
             },
-          }),
+          },
         },
         expectedPluginPackages: [],
         expectedLogs: {
           errors: [
             {
-              message:
-                "failed to load dynamic plugin manifest from '/backstageRoot/dist-dynamic/test-backend-plugin/alpha'",
+              message: `failed to load dynamic plugin manifest from '${mockDir.resolve(
+                'backstageRoot/dist-dynamic/test-backend-plugin/alpha',
+              )}'`,
               meta: {
                 name: 'SyntaxError',
-                message: 'Unexpected token i in JSON at position 0',
+                message: expect.stringContaining('Unexpected token'),
               },
             },
           ],
@@ -580,31 +522,24 @@ Please add '/backstageRoot/node_modules' to the 'NODE_PATH' when running the bac
       {
         name: 'invalid package.json',
         fileSystem: {
-          '/backstageRoot': mockFs.directory({
-            items: {
-              'dist-dynamic': mockFs.directory({
-                items: {
-                  'test-backend-plugin': mockFs.directory({
-                    items: {
-                      'package.json': mockFs.file({
-                        content: "invalid json content, 1, '",
-                      }),
-                    },
-                  }),
-                },
-              }),
+          backstageRoot: {
+            'dist-dynamic': {
+              'test-backend-plugin': {
+                'package.json': "invalid json content, 1, '",
+              },
             },
-          }),
+          },
         },
         expectedPluginPackages: [],
         expectedLogs: {
           errors: [
             {
-              message:
-                "failed to load dynamic plugin manifest from '/backstageRoot/dist-dynamic/test-backend-plugin'",
+              message: `failed to load dynamic plugin manifest from '${mockDir.resolve(
+                'backstageRoot/dist-dynamic/test-backend-plugin',
+              )}'`,
               meta: {
                 name: 'SyntaxError',
-                message: 'Unexpected token i in JSON at position 0',
+                message: expect.stringContaining('Unexpected token'),
               },
             },
           ],
@@ -613,32 +548,25 @@ Please add '/backstageRoot/node_modules' to the 'NODE_PATH' when running the bac
       {
         name: 'missing backstage role in package.json',
         fileSystem: {
-          '/backstageRoot': mockFs.directory({
-            items: {
-              'dist-dynamic': mockFs.directory({
-                items: {
-                  'test-backend-plugin': mockFs.directory({
-                    items: {
-                      'package.json': mockFs.file({
-                        content: JSON.stringify({
-                          name: 'test-backend-plugin-dynamic',
-                          version: '0.0.0',
-                          main: 'dist/index.cjs.js',
-                        }),
-                      }),
-                    },
-                  }),
-                },
-              }),
+          backstageRoot: {
+            'dist-dynamic': {
+              'test-backend-plugin': {
+                'package.json': JSON.stringify({
+                  name: 'test-backend-plugin-dynamic',
+                  version: '0.0.0',
+                  main: 'dist/index.cjs.js',
+                }),
+              },
             },
-          }),
+          },
         },
         expectedPluginPackages: [],
         expectedLogs: {
           errors: [
             {
-              message:
-                "failed to load dynamic plugin manifest from '/backstageRoot/dist-dynamic/test-backend-plugin'",
+              message: `failed to load dynamic plugin manifest from '${mockDir.resolve(
+                'backstageRoot/dist-dynamic/test-backend-plugin',
+              )}'`,
               meta: {
                 name: 'Error',
                 message: "field 'backstage.role' not found in 'package.json'",
@@ -650,32 +578,25 @@ Please add '/backstageRoot/node_modules' to the 'NODE_PATH' when running the bac
       {
         name: 'missing main field in package.json',
         fileSystem: {
-          '/backstageRoot': mockFs.directory({
-            items: {
-              'dist-dynamic': mockFs.directory({
-                items: {
-                  'test-backend-plugin': mockFs.directory({
-                    items: {
-                      'package.json': mockFs.file({
-                        content: JSON.stringify({
-                          name: 'test-backend-plugin-dynamic',
-                          version: '0.0.0',
-                          backstage: { role: 'backend-plugin' },
-                        }),
-                      }),
-                    },
-                  }),
-                },
-              }),
+          backstageRoot: {
+            'dist-dynamic': {
+              'test-backend-plugin': {
+                'package.json': JSON.stringify({
+                  name: 'test-backend-plugin-dynamic',
+                  version: '0.0.0',
+                  backstage: { role: 'backend-plugin' },
+                }),
+              },
             },
-          }),
+          },
         },
         expectedPluginPackages: [],
         expectedLogs: {
           errors: [
             {
-              message:
-                "failed to load dynamic plugin manifest from '/backstageRoot/dist-dynamic/test-backend-plugin'",
+              message: `failed to load dynamic plugin manifest from '${mockDir.resolve(
+                'backstageRoot/dist-dynamic/test-backend-plugin',
+              )}'`,
               meta: {
                 name: 'Error',
                 message: "field 'main' not found in 'package.json'",
@@ -686,7 +607,7 @@ Please add '/backstageRoot/node_modules' to the 'NODE_PATH' when running the bac
       },
     ])('$name', async (tc: TestCase): Promise<void> => {
       const logger = new MockedLogger();
-      const backstageRoot = '/backstageRoot';
+      const backstageRoot = mockDir.resolve('backstageRoot');
       async function toTest(): Promise<ScannedPluginPackage[]> {
         const pluginScanner = new PluginScanner(
           new ConfigReader(
@@ -705,7 +626,7 @@ Please add '/backstageRoot/node_modules' to the 'NODE_PATH' when running the bac
         return await pluginScanner.scanRoot();
       }
       if (tc.fileSystem) {
-        mockFs(tc.fileSystem);
+        mockDir.setContent(tc.fileSystem);
       }
       if (tc.expectedError) {
         /* eslint-disable-next-line jest/no-conditional-expect */

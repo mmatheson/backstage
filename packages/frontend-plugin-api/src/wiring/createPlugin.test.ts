@@ -16,21 +16,21 @@
 
 import React from 'react';
 import { createApp } from '@backstage/frontend-app-api';
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import { createSchemaFromZod } from '../schema/createSchemaFromZod';
 import { createPlugin, BackstagePlugin } from './createPlugin';
 import { JsonObject } from '@backstage/types';
 import { createExtension } from './createExtension';
 import { createExtensionDataRef } from './createExtensionDataRef';
 import { coreExtensionData } from './coreExtensionData';
-import { MockConfigApi } from '@backstage/test-utils';
+import { MockConfigApi, renderWithEffects } from '@backstage/test-utils';
 import { createExtensionInput } from './createExtensionInput';
 
 const nameExtensionDataRef = createExtensionDataRef<string>('name');
 
 const TechRadarPage = createExtension({
   id: 'plugin.techradar.page',
-  at: 'test.output/names',
+  attachTo: { id: 'test.output', input: 'names' },
   output: {
     name: nameExtensionDataRef,
   },
@@ -41,7 +41,7 @@ const TechRadarPage = createExtension({
 
 const CatalogPage = createExtension({
   id: 'plugin.catalog.page',
-  at: 'test.output/names',
+  attachTo: { id: 'test.output', input: 'names' },
   output: {
     name: nameExtensionDataRef,
   },
@@ -55,7 +55,7 @@ const CatalogPage = createExtension({
 
 const TechDocsAddon = createExtension({
   id: 'plugin.techdocs.addon.example',
-  at: 'plugin.techdocs.page/addons',
+  attachTo: { id: 'plugin.techdocs.page', input: 'addons' },
   output: {
     name: nameExtensionDataRef,
   },
@@ -69,7 +69,7 @@ const TechDocsAddon = createExtension({
 
 const TechDocsPage = createExtension({
   id: 'plugin.techdocs.page',
-  at: 'test.output/names',
+  attachTo: { id: 'test.output', input: 'names' },
   inputs: {
     addons: createExtensionInput({
       name: nameExtensionDataRef,
@@ -85,7 +85,7 @@ const TechDocsPage = createExtension({
 
 const outputExtension = createExtension({
   id: 'test.output',
-  at: 'root',
+  attachTo: { id: 'root', input: 'default' },
   inputs: {
     names: createExtensionInput({
       name: nameExtensionDataRef,
@@ -112,7 +112,7 @@ function createTestAppRoot({
 }) {
   return createApp({
     plugins: plugins,
-    config: new MockConfigApi(config),
+    configLoader: async () => new MockConfigApi(config),
   }).createRoot();
 }
 
@@ -123,24 +123,26 @@ describe('createPlugin', () => {
     expect(plugin).toBeDefined();
   });
 
-  it('should create a plugin with extension instances', () => {
+  it('should create a plugin with extension instances', async () => {
     const plugin = createPlugin({
       id: 'empty',
       extensions: [TechRadarPage, CatalogPage, outputExtension],
     });
     expect(plugin).toBeDefined();
 
-    render(
+    await renderWithEffects(
       createTestAppRoot({
         plugins: [plugin],
         config: { app: { extensions: [{ 'core.layout': false }] } },
       }),
     );
 
-    expect(screen.getByText('Names: TechRadar, Catalog')).toBeInTheDocument();
+    await expect(
+      screen.findByText('Names: TechRadar, Catalog'),
+    ).resolves.toBeInTheDocument();
   });
 
-  it('should create a plugin with nested extension instances', () => {
+  it('should create a plugin with nested extension instances', async () => {
     const plugin = createPlugin({
       id: 'empty',
       extensions: [
@@ -153,7 +155,7 @@ describe('createPlugin', () => {
     });
     expect(plugin).toBeDefined();
 
-    render(
+    await renderWithEffects(
       createTestAppRoot({
         plugins: [plugin],
         config: {
@@ -171,10 +173,10 @@ describe('createPlugin', () => {
       }),
     );
 
-    expect(
-      screen.getByText(
+    await expect(
+      screen.findByText(
         'Names: TechRadar, CatalogRenamed, TechDocs-TechDocsAddon',
       ),
-    ).toBeInTheDocument();
+    ).resolves.toBeInTheDocument();
   });
 });

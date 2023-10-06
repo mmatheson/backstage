@@ -1,5 +1,31 @@
 # @backstage/plugin-kubernetes-common
 
+## 0.7.0-next.0
+
+### Minor Changes
+
+- 2d8151061c: Refactor Kubernetes plugins in line with ADR 11, no breaking changes yet
+
+### Patch Changes
+
+- Updated dependencies
+  - @backstage/core-plugin-api@1.7.0-next.0
+  - @backstage/catalog-model@1.4.2
+  - @backstage/errors@1.2.2
+  - @backstage/types@1.1.1
+  - @backstage/plugin-permission-common@0.7.8
+
+## 0.6.6
+
+### Patch Changes
+
+- 0ad36158d980: Loosened the type of the `auth` field in the body of requests to the `retrieveObjectsByServiceId` endpoint. Now any JSON object is allowed, which should make it easier for integrators to write their own custom auth strategies for Kubernetes.
+- ccf00accb408: Add AWS Annotations to Kubernetes Cluster Resource
+- 406b786a2a2c: Mark package as being free of side effects, allowing more optimized Webpack builds.
+- Updated dependencies
+  - @backstage/catalog-model@1.4.2
+  - @backstage/plugin-permission-common@0.7.8
+
 ## 0.6.6-next.2
 
 ### Patch Changes

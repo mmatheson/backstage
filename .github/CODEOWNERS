@@ -5,15 +5,15 @@
 # https://help.github.com/articles/about-codeowners/
 
 *                                                 @backstage/maintainers @backstage/reviewers
-yarn.lock                                         @backstage/maintainers @backstage/reviewers @backstage-service
-*/yarn.lock                                       @backstage/maintainers @backstage/reviewers @backstage-service
+yarn.lock                                         @backstage/maintainers @backstage-service
+*/yarn.lock                                       @backstage/maintainers @backstage-service
 /.changeset/*.md
-/cypress/src/integration/plugins/techdocs.spec.ts @backstage/techdocs-maintainers
 /docs/assets/search                               @backstage/discoverability-maintainers
 /docs/features/search                             @backstage/discoverability-maintainers
 /docs/features/techdocs                           @backstage/techdocs-maintainers
 /docs/plugins/integrating-search-into-plugins.md  @backstage/discoverability-maintainers
 /packages/cli/src/commands/onboard                @backstage/sharks
+/packages/backend-openapi-utils                   @backstage/maintainers @backstage/reviewers @backstage/openapi-tooling-maintainers
 /packages/techdocs-cli                            @backstage/techdocs-maintainers
 /packages/techdocs-cli-embedded-app               @backstage/techdocs-maintainers
 /plugins/adr                                      @backstage/maintainers @backstage/reviewers @kuangp
@@ -22,6 +22,7 @@ yarn.lock                                         @backstage/maintainers @backst
 /plugins/azure-devops                             @backstage/maintainers @backstage/reviewers @awanlin
 /plugins/azure-devops-backend                     @backstage/maintainers @backstage/reviewers @awanlin
 /plugins/azure-devops-common                      @backstage/maintainers @backstage/reviewers @awanlin
+/plugins/analytics-module-newrelic-browser        @backstage/maintainers @backstage/reviewers @jmezach
 /plugins/bitbucket-cloud-common                   @backstage/maintainers @backstage/reviewers @pjungermann
 /plugins/bitrise                                  @backstage/maintainers @backstage/reviewers @backstage/sda-se-reviewers
 /plugins/catalog                                  @backstage/maintainers @backstage/reviewers @backstage/catalog-maintainers
@@ -63,6 +64,7 @@ yarn.lock                                         @backstage/maintainers @backst
 /plugins/linguist                                 @backstage/maintainers @backstage/reviewers @awanlin
 /plugins/linguist-backend                         @backstage/maintainers @backstage/reviewers @awanlin
 /plugins/linguist-common                          @backstage/maintainers @backstage/reviewers @awanlin
+/plugins/octopus-deploy                           @backstage/maintainers @backstage/reviewers @jmezach
 /plugins/permission-*                             @backstage/permission-maintainers
 /plugins/playlist                                 @backstage/maintainers @backstage/reviewers @kuangp
 /plugins/playlist-*                               @backstage/maintainers @backstage/reviewers @kuangp

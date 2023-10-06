@@ -7,6 +7,7 @@
 
 import { AnyApiFactory } from '@backstage/core-plugin-api';
 import { AnyApiRef } from '@backstage/core-plugin-api';
+import { AppTheme } from '@backstage/core-plugin-api';
 import { IconComponent } from '@backstage/core-plugin-api';
 import { JsonObject } from '@backstage/types';
 import { JSX as JSX_2 } from 'react';
@@ -71,6 +72,7 @@ export const coreExtensionData: {
   apiFactory: ConfigurableExtensionDataRef<AnyApiFactory, {}>;
   routeRef: ConfigurableExtensionDataRef<RouteRef, {}>;
   navTarget: ConfigurableExtensionDataRef<NavTarget, {}>;
+  theme: ConfigurableExtensionDataRef<AppTheme, {}>;
 };
 
 // @public (undocumented)
@@ -134,7 +136,10 @@ export interface CreateExtensionOptions<
   TConfig,
 > {
   // (undocumented)
-  at: string;
+  attachTo: {
+    id: string;
+    input: string;
+  };
   // (undocumented)
   configSchema?: PortableSchema<TConfig>;
   // (undocumented)
@@ -180,7 +185,10 @@ export function createPageExtension<
       }
   ) & {
     id: string;
-    at?: string;
+    attachTo?: {
+      id: string;
+      input: string;
+    };
     disabled?: boolean;
     inputs?: TInputs;
     routeRef?: RouteRef;
@@ -200,11 +208,17 @@ export function createSchemaFromZod<TOutput, TInput>(
 ): PortableSchema<TOutput>;
 
 // @public (undocumented)
+export function createThemeExtension(theme: AppTheme): Extension<never>;
+
+// @public (undocumented)
 export interface Extension<TConfig> {
   // (undocumented)
   $$type: '@backstage/Extension';
   // (undocumented)
-  at: string;
+  attachTo: {
+    id: string;
+    input: string;
+  };
   // (undocumented)
   configSchema?: PortableSchema<TConfig>;
   // (undocumented)
@@ -319,7 +333,4 @@ export type PortableSchema<TOutput> = {
   parse: (input: unknown) => TOutput;
   schema: JsonObject;
 };
-
-// @public (undocumented)
-export function useRouteRef(routeRef: RouteRef<any>): () => string;
 ```

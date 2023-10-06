@@ -20,12 +20,12 @@ import { JsonValue } from '@backstage/types';
 
 export interface ExtensionParameters {
   id: string;
-  at?: string;
+  attachTo?: { id: string; input: string };
   disabled?: boolean;
   config?: unknown;
 }
 
-const knownExtensionParameters = ['at', 'disabled', 'config'];
+const knownExtensionParameters = ['attachTo', 'disabled', 'config'];
 
 // Since we'll never merge arrays in config the config reader context
 // isn't too much of a help. Fall back to manual config reading logic
@@ -143,15 +143,33 @@ export function expandShorthandExtensionParameters(
     throw new Error(errorMsg('value must be a boolean or object', id));
   }
 
-  const at = value.at;
+  const attachTo = value.attachTo as { id: string; input: string } | undefined;
   const disabled = value.disabled;
   const config = value.config;
 
-  if (at !== undefined && typeof at !== 'string') {
-    throw new Error(errorMsg('must be a string', id, 'at'));
-  } else if (disabled !== undefined && typeof disabled !== 'boolean') {
+  if (attachTo !== undefined) {
+    if (
+      attachTo === null ||
+      typeof attachTo !== 'object' ||
+      Array.isArray(attachTo)
+    ) {
+      throw new Error(errorMsg('must be an object', id, 'attachTo'));
+    }
+    if (typeof attachTo.id !== 'string' || attachTo.id === '') {
+      throw new Error(
+        errorMsg('must be a non-empty string', id, 'attachTo.id'),
+      );
+    }
+    if (typeof attachTo.input !== 'string' || attachTo.input === '') {
+      throw new Error(
+        errorMsg('must be a non-empty string', id, 'attachTo.input'),
+      );
+    }
+  }
+  if (disabled !== undefined && typeof disabled !== 'boolean') {
     throw new Error(errorMsg('must be a boolean', id, 'disabled'));
-  } else if (
+  }
+  if (
     config !== undefined &&
     (typeof config !== 'object' || config === null || Array.isArray(config))
   ) {
@@ -175,7 +193,7 @@ export function expandShorthandExtensionParameters(
 
   return {
     id,
-    at,
+    attachTo,
     disabled,
     config,
   };
@@ -184,7 +202,7 @@ export function expandShorthandExtensionParameters(
 export interface ExtensionInstanceParameters {
   extension: Extension<unknown>;
   source?: BackstagePlugin;
-  at: string;
+  attachTo: { id: string; input: string };
   config?: unknown;
 }
 
@@ -196,37 +214,95 @@ export function mergeExtensionParameters(options: {
 }): ExtensionInstanceParameters[] {
   const { sources, builtinExtensions, parameters } = options;
 
+  const pluginExtensions = sources.flatMap(source => {
+    return source.extensions.map(extension => ({ ...extension, source }));
+  });
+
+  // Prevent root override
+  if (pluginExtensions.some(({ id }) => id === 'root')) {
+    const rootPluginIds = pluginExtensions
+      .filter(({ id }) => id === 'root')
+      .map(({ source }) => source.id);
+    throw new Error(
+      `The following plugin(s) are overriding the 'root' extension which is forbidden: ${rootPluginIds.join(
+        ',',
+      )}`,
+    );
+  }
+
   const overrides = [
-    ...sources.flatMap(plugin =>
-      plugin.extensions.map(extension => ({
-        extension,
-        params: {
-          source: plugin,
-          at: extension.at,
-          disabled: extension.disabled,
-          config: undefined as unknown,
-        },
-      })),
-    ),
+    ...pluginExtensions.map(({ source, ...extension }) => ({
+      extension,
+      params: {
+        source,
+        attachTo: extension.attachTo,
+        disabled: extension.disabled,
+        config: undefined as unknown,
+      },
+    })),
     ...builtinExtensions.map(extension => ({
       extension,
       params: {
         source: undefined,
-        at: extension.at,
+        attachTo: extension.attachTo,
         disabled: extension.disabled,
         config: undefined as unknown,
       },
     })),
   ];
 
+  const duplicatedExtensionIds = new Set<string>();
+  const duplicatedExtensionData = overrides.reduce<
+    Record<string, Record<string, number>>
+  >((data, { extension, params }) => {
+    const extensionId = extension.id;
+    const extensionData = data?.[extensionId];
+    if (extensionData) duplicatedExtensionIds.add(extensionId);
+    const pluginId = params.source?.id ?? 'internal';
+    const pluginCount = extensionData?.[pluginId] ?? 0;
+    return {
+      ...data,
+      [extensionId]: { ...extensionData, [pluginId]: pluginCount + 1 },
+    };
+  }, {});
+
+  if (duplicatedExtensionIds.size > 0) {
+    throw new Error(
+      `The following extensions are duplicated: ${Array.from(
+        duplicatedExtensionIds,
+      )
+        .map(
+          extensionId =>
+            `The extension '${extensionId}' was provided ${Object.keys(
+              duplicatedExtensionData[extensionId],
+            )
+              .map(
+                pluginId =>
+                  `${duplicatedExtensionData[extensionId][pluginId]} time(s) by the plugin '${pluginId}'`,
+              )
+              .join(' and ')}`,
+        )
+        .join(', ')}`,
+    );
+  }
+
   for (const overrideParam of parameters) {
+    const extensionId = overrideParam.id;
+
+    // Prevent root parametrization
+    if (extensionId === 'root') {
+      throw new Error(
+        "A 'root' extension configuration was detected, but the root extension is not configurable",
+      );
+    }
+
     const existingIndex = overrides.findIndex(
-      e => e.extension.id === overrideParam.id,
+      e => e.extension.id === extensionId,
     );
     if (existingIndex !== -1) {
       const existing = overrides[existingIndex];
-      if (overrideParam.at) {
-        existing.params.at = overrideParam.at;
+      if (overrideParam.attachTo) {
+        existing.params.attachTo = overrideParam.attachTo;
       }
       if (overrideParam.config) {
         // TODO: merge config?
@@ -243,7 +319,7 @@ export function mergeExtensionParameters(options: {
         }
       }
     } else {
-      throw new Error(`Extension ${overrideParam.id} does not exist`);
+      throw new Error(`Extension ${extensionId} does not exist`);
     }
   }
 
@@ -251,7 +327,7 @@ export function mergeExtensionParameters(options: {
     .filter(override => !override.params.disabled)
     .map(param => ({
       extension: param.extension,
-      at: param.params.at,
+      attachTo: param.params.attachTo,
       source: param.params.source,
       config: param.params.config,
     }));
